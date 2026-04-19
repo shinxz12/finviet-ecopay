@@ -63,15 +63,25 @@ export class HttpClient {
   }
 
   private async parseResponse<T extends EcoPayBaseResponse>(res: Response): Promise<T> {
-    let json: T;
+    let json: unknown;
     try {
-      json = (await res.json()) as T;
+      json = await res.json();
     } catch {
       throw new EcoPayError(`HTTP ${res.status}: failed to parse JSON response`);
     }
-    if (json.message_key && json.message_key !== 'SUCCESS') {
-      throw new EcoPayAPIError(json.message, json.result_code, json.message_key);
+
+    if (!res.ok) {
+      const body = json as Record<string, unknown>;
+      const msg = Array.isArray(body.message)
+        ? (body.message as string[]).join(', ')
+        : String(body.message ?? res.statusText);
+      throw new EcoPayError(`HTTP ${res.status}: ${msg}`);
     }
-    return json;
+
+    const typed = json as T;
+    if (typed.message_key && typed.message_key !== 'SUCCESS') {
+      throw new EcoPayAPIError(typed.message, typed.result_code, typed.message_key);
+    }
+    return typed;
   }
 }
